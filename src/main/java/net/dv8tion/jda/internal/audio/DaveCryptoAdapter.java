@@ -55,7 +55,10 @@ public class DaveCryptoAdapter implements CryptoAdapter {
         if (success) {
             transportCryptoAdapter.encrypt(output, encryptBuffer.buffer());
         } else {
-            AudioConnection.LOG.debug("Dave encryption failed during transition - dropping frame");
+            AudioConnection.LOG.warn("DAVE encryption failed for SSRC {}. Falling back to transport-only encryption.", ssrc);
+
+            output.buffer().reset();
+            transportCryptoAdapter.encrypt(output, audio);
         }
     }
 
