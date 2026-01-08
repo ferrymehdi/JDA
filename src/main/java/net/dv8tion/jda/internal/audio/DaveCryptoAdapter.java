@@ -58,23 +58,19 @@ public class DaveCryptoAdapter implements CryptoAdapter {
     }
 
     @Override
-    public boolean decrypt(short extensionLength, long userId, ByteBuffer packet, ResizingByteBuffer decrypted) {
-        if (decryptBuffer == null) {
-            decryptBuffer = new ResizingByteBuffer(ByteBuffer.allocateDirect(1024));
+    public void encrypt(ResizingByteBuffer output, ByteBuffer audio) {
+        int maxSize = daveSession.getMaxEncryptedFrameSize(DaveSession.MediaType.AUDIO, audio.remaining());
+
+        output.buffer().mark();
+        encryptBuffer.prepareWrite(maxSize);
+
+        boolean success = daveSession.encrypt(DaveSession.MediaType.AUDIO, ssrc, audio, encryptBuffer.buffer());
+
+        if (success) {
+            transportCryptoAdapter.encrypt(output, encryptBuffer.buffer());
+        } else {
+            AudioConnection.LOG.debug("Dave encryption failed during transition - dropping frame");
         }
-
-        boolean success = transportCryptoAdapter.decrypt(extensionLength, userId, packet, decryptBuffer);
-        if (!success) {
-            return false;
-        }
-
-        handleRTPHeaderExtension(decryptBuffer.buffer(), extensionLength);
-
-        int outputSize = daveSession.getMaxDecryptedFrameSize(
-                DaveSession.MediaType.AUDIO, userId, decryptBuffer.buffer().remaining());
-
-        decrypted.prepareWrite(outputSize);
-        return daveSession.decrypt(DaveSession.MediaType.AUDIO, userId, decryptBuffer.buffer(), decrypted.buffer());
     }
 
     private void handleRTPHeaderExtension(ByteBuffer decrypted, short extensionLength) {
