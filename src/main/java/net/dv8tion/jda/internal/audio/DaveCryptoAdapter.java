@@ -46,22 +46,26 @@ public class DaveCryptoAdapter implements CryptoAdapter {
     @Override
     public void encrypt(ResizingByteBuffer output, ByteBuffer audio) {
         int maxSize = daveSession.getMaxEncryptedFrameSize(DaveSession.MediaType.AUDIO, audio.remaining());
-
         output.buffer().mark();
         encryptBuffer.prepareWrite(maxSize);
 
-        boolean success = daveSession.encrypt(DaveSession.MediaType.AUDIO, ssrc, audio, encryptBuffer.buffer());
+        boolean success = false;
+        int retries = 0;
+
+        while (!success && retries < 3) {
+            success = daveSession.encrypt(DaveSession.MediaType.AUDIO, ssrc, audio, encryptBuffer.buffer());
+            if (!success) {
+                retries++;
+                try { Thread.sleep(2); } catch (InterruptedException ignored) {}
+            }
+        }
 
         if (success) {
             transportCryptoAdapter.encrypt(output, encryptBuffer.buffer());
         } else {
-            AudioConnection.LOG.warn("DAVE encryption failed for SSRC {}. Falling back to transport-only encryption.", ssrc);
-
-            output.buffer().reset();
-            transportCryptoAdapter.encrypt(output, audio);
+            AudioConnection.LOG.warn("DAVE Encryption failed after retries for SSRC {}. Dropping frame.", ssrc);
         }
     }
-
     @Override
     public boolean decrypt(short extensionLength, long userId, ByteBuffer packet, ResizingByteBuffer decrypted) {
         if (decryptBuffer == null) {
